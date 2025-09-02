@@ -7,6 +7,11 @@ const PORT = process.env.PORT || 3000;
 const FRONTEND_URL = 'http://localhost:5173';
 const BACKEND_URL = 'http://localhost:3001';
 
+// Normalize chat routes so they always land on the HTML entry
+app.get(['/chat', '/chat/'], (req, res) => {
+  res.redirect(301, '/chat/index.html');
+});
+
 app.use('/api', createProxyMiddleware({
   target: BACKEND_URL,
   changeOrigin: true,
