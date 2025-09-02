@@ -1,0 +1,19 @@
+{
+  "name": "vite-template-monorepo",
+  "version": "1.0.0",
+  "description": "Monorepo with frontend, backend, and proxy",
+  "scripts": {
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../proxy && npm install",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:proxy": "cd proxy && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:proxy\"",
+    "start:frontend": "cd frontend && npm run dev",
+    "start:backend": "cd backend && npm start",
+    "start:proxy": "cd proxy && npm start",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"npm run start:proxy\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
