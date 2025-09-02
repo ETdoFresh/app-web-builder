@@ -23,3 +23,23 @@ async function query(text, params) {
 }
 
 module.exports = { pool, query };
+
+// Ensure required tables exist
+async function ensureTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_logs (
+      id BIGSERIAL PRIMARY KEY,
+      session_id TEXT,
+      direction TEXT NOT NULL,
+      role TEXT,
+      content TEXT,
+      model TEXT,
+      meta JSONB,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS chat_logs_created_at_idx ON chat_logs(created_at);
+    CREATE INDEX IF NOT EXISTS chat_logs_session_idx ON chat_logs(session_id);
+  `);
+}
+
+module.exports.ensureTables = ensureTables;

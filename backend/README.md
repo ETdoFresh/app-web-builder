@@ -34,6 +34,13 @@ SSE Chat Completions (OpenRouter)
      -H 'Content-Type: application/json' \
      -d '{"messages":[{"role":"user","content":"Hello!"}]}'`
 
+Persistence
+- Table: `chat_logs` created on startup if missing.
+- Stores two rows per interaction when possible:
+  - `direction='request'` with the incoming payload (in `meta`) and concatenated user message text (in `content`).
+  - `direction='response'` with the streamed assistant text in `content` and upstream status in `meta`.
+- Field `session_id` comes from request body `session_id` or an auto-generated ID.
+
 
 Notes
 - The server loads env from `backend/.env` explicitly, so it works regardless of the working directory or the Docker context.

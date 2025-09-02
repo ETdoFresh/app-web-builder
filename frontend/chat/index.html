@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat • OpenRouter</title>
+  <style>
+    :root {
+      --bg: #0f1226;
+      --panel: #15193a;
+      --panel-2: #1a1f4d;
+      --text: #e6e8ff;
+      --muted: #9aa3ff;
+      --accent: #7c8aff;
+      --accent-2: #9f7aea;
+      --danger: #ff6b6b;
+      --good: #35d07f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 20% -10%, #1c2255 0%, transparent 60%),
+                  radial-gradient(1000px 600px at 120% 10%, #3a1d5d 0%, transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(8px);
+      background: rgba(10, 12, 30, 0.6);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .nav {
+      max-width: 900px; margin: 0 auto; padding: 14px 16px;
+      display: flex; align-items: center; gap: 12px; justify-content: space-between;
+    }
+    .nav a { color: var(--muted); text-decoration: none; }
+    .status {
+      display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #888; box-shadow: 0 0 8px rgba(255,255,255,0.1); }
+    .dot.ok { background: var(--good); box-shadow: 0 0 10px rgba(53,208,127,0.6); }
+    .dot.err { background: var(--danger); box-shadow: 0 0 10px rgba(255,107,107,0.6); }
+
+    .wrap { max-width: 900px; margin: 0 auto; width: 100%; flex: 1; display: flex; flex-direction: column; }
+    .messages { flex: 1; padding: 20px 16px 120px; overflow-y: auto; }
+    .msg { display: flex; gap: 12px; margin: 12px 0; }
+    .avatar { width: 32px; height: 32px; border-radius: 6px; background: var(--panel-2); display: grid; place-items: center; font-weight: 700; color: var(--muted); }
+    .bubble { max-width: 80%; padding: 12px 14px; border-radius: 12px; line-height: 1.45; }
+    .user .bubble { background: #24306b; border: 1px solid rgba(255,255,255,0.08); }
+    .assistant .bubble { background: var(--panel); border: 1px solid rgba(255,255,255,0.06); }
+    .assistant .avatar { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; }
+    .msg pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; }
+
+    .composer {
+      position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px;
+      background: linear-gradient(180deg, rgba(10,12,30,0) 0%, rgba(10,12,30,0.7) 30%, rgba(10,12,30,0.9) 100%);
+    }
+    .composer .inner { max-width: 900px; margin: 0 auto; background: var(--panel); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; display: flex; gap: 10px; }
+    .composer textarea { flex: 1; background: transparent; border: none; color: var(--text); resize: none; min-height: 44px; max-height: 160px; outline: none; font-size: 15px; }
+    .composer button { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; border: none; padding: 10px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+    .composer button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .toolbar { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .link { color: var(--accent); text-decoration: none; }
+  </style>
+  <script>
+    const sessionKey = 'chat_session_id_v1';
+    function getSessionId() {
+      let id = localStorage.getItem(sessionKey);
+      if (!id) { id = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)); localStorage.setItem(sessionKey, id); }
+      return id;
+    }
+
+    let messages = [];
+    function addMessage(role, content) {
+      messages.push({ role, content });
+      renderMessages();
+    }
+
+    function renderMessages() {
+      const list = document.getElementById('messages');
+      list.innerHTML = '';
+      messages.forEach(m => {
+        const item = document.createElement('div');
+        item.className = `msg ${m.role}`;
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = m.role === 'user' ? 'U' : 'A';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        const pre = document.createElement('pre');
+        pre.textContent = m.content || '';
+        bubble.appendChild(pre);
+        item.appendChild(avatar);
+        item.appendChild(bubble);
+        list.appendChild(item);
+      });
+      list.scrollTop = list.scrollHeight;
+    }
+
+    async function checkHealth() {
+      const dot = document.getElementById('healthdot');
+      const label = document.getElementById('healthlabel');
+      try {
+        const r = await fetch('/api/health');
+        if (r.ok) { dot.classList.add('ok'); dot.classList.remove('err'); label.textContent = 'Backend: Healthy'; }
+        else { dot.classList.add('err'); dot.classList.remove('ok'); label.textContent = 'Backend: Error'; }
+      } catch {
+        dot.classList.add('err'); dot.classList.remove('ok'); label.textContent = 'Backend: Offline';
+      }
+    }
+
+    async function sendMessage() {
+      const ta = document.getElementById('input');
+      const text = ta.value.trim();
+      if (!text) return;
+      ta.value = '';
+      addMessage('user', text);
+
+      // Prepare an assistant placeholder we can stream into
+      const placeholder = { role: 'assistant', content: '' };
+      messages.push(placeholder);
+      renderMessages();
+
+      const body = { messages, session_id: getSessionId() };
+      try {
+        const res = await fetch('/api/v1/chat/completions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        if (!res.ok || !res.body) {
+          throw new Error('Upstream error: ' + res.status);
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const block = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const lines = block.split('\n').filter(l => l.startsWith('data:')).map(l => l.replace(/^data:\s?/, ''));
+            for (const line of lines) {
+              if (!line || line === '[DONE]') continue;
+              try {
+                const json = JSON.parse(line);
+                const choice = json.choices && json.choices[0];
+                if (choice && choice.delta && typeof choice.delta.content === 'string') {
+                  placeholder.content += choice.delta.content;
+                  renderMessages();
+                } else if (choice && choice.message && typeof choice.message.content === 'string') {
+                  placeholder.content += choice.message.content;
+                  renderMessages();
+                } else if (typeof json.content === 'string') {
+                  placeholder.content += json.content;
+                  renderMessages();
+                }
+              } catch (_) { /* ignore non-JSON */ }
+            }
+          }
+        }
+        renderMessages();
+      } catch (e) {
+        placeholder.content += `\n\n[Error] ${e.message || e}`;
+        renderMessages();
+      }
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    function clearChat() {
+      messages = [];
+      renderMessages();
+    }
+
+    window.addEventListener('load', () => {
+      checkHealth();
+      setInterval(checkHealth, 5000);
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <div class="nav">
+      <div>
+        <a href="/">← Back</a>
+      </div>
+      <div class="status">
+        <span class="dot" id="healthdot"></span>
+        <span id="healthlabel">Checking...</span>
+      </div>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="messages" id="messages"></div>
+  </div>
+  <div class="composer">
+    <div class="inner">
+      <textarea id="input" placeholder="Ask anything..." rows="1" onkeydown="handleKey(event)"></textarea>
+      <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end; min-width: 120px;">
+        <button onclick="sendMessage()">Send ↵</button>
+        <div class="toolbar">
+          <a class="link" href="#" onclick="clearChat(); return false;">Clear</a>
+          <span>Session: <code style="opacity:0.8">local</code></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
