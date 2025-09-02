@@ -23,6 +23,18 @@ Health Checks
 - Backend health: `curl http://localhost:3001/api/health`
 - DB health: `curl http://localhost:3001/api/db-health`
 
+SSE Chat Completions (OpenRouter)
+- Endpoint: `POST http://localhost:3001/api/v1/chat/completions`
+- Streaming: Server-Sent Events (forwards upstream chunks)
+- Env:
+  - `OPENROUTER_API_KEY` (required)
+  - `OPENROUTER_MODEL` (optional default if request omits `model`)
+- Example request (streams until done):
+  - `curl -N -X POST http://localhost:3001/api/v1/chat/completions \
+     -H 'Content-Type: application/json' \
+     -d '{"messages":[{"role":"user","content":"Hello!"}]}'`
+
+
 Notes
 - The server loads env from `backend/.env` explicitly, so it works regardless of the working directory or the Docker context.
 - If connecting to a managed Postgres that enforces TLS, set `PGSSL=true` in `.env`.
