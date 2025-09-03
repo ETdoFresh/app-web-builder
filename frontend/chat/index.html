@@ -54,6 +54,8 @@
     .assistant .bubble { background: var(--panel); border: 1px solid rgba(255,255,255,0.06); }
     .assistant .avatar { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; }
     .msg pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; }
+    details summary { cursor: pointer; color: var(--muted); }
+    details pre { margin-top: 6px; opacity: 0.95; }
 
     .composer {
       position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px;
@@ -94,6 +96,17 @@
         const pre = document.createElement('pre');
         pre.textContent = m.content || '';
         bubble.appendChild(pre);
+        if (m.role === 'assistant' && m.thinking && m.thinking.trim()) {
+          const details = document.createElement('details');
+          details.style.marginTop = '8px';
+          const summary = document.createElement('summary');
+          summary.textContent = 'Thinking…';
+          const thinkPre = document.createElement('pre');
+          thinkPre.textContent = m.thinking;
+          details.appendChild(summary);
+          details.appendChild(thinkPre);
+          bubble.appendChild(details);
+        }
         item.appendChild(avatar);
         item.appendChild(bubble);
         list.appendChild(item);
@@ -121,7 +134,7 @@
       addMessage('user', text);
 
       // Prepare an assistant placeholder we can stream into
-      const placeholder = { role: 'assistant', content: '' };
+      const placeholder = { role: 'assistant', content: '', thinking: '' };
       messages.push(placeholder);
       renderMessages();
 
@@ -129,7 +142,10 @@
       const messagesToSend = messages.filter(m => m && (m.role === 'user' || m.role === 'system' || m.role === 'tool'));
       const effortSel = document.getElementById('effort');
       const effort = effortSel && effortSel.value ? effortSel.value : 'medium';
-      const body = { messages: messagesToSend, session_id: getSessionId(), reasoning: { effort } };
+      const body = { messages: messagesToSend, session_id: getSessionId() };
+      if (effort && effort !== 'off') {
+        body.reasoning = { effort };
+      }
       console.log('[Chat] Request body to backend', body);
       try {
         const res = await fetch('/api/v1/chat/completions?debug=1', {
@@ -182,6 +198,27 @@
                   placeholder.content += json.content;
                   renderMessages();
                 }
+
+                // Capture reasoning/thinking tokens if present from various providers
+                const appendThinking = (val) => {
+                  if (typeof val === 'string' && val) {
+                    placeholder.thinking += val;
+                    renderMessages();
+                  }
+                };
+                if (choice && choice.delta) {
+                  appendThinking(choice.delta.reasoning);
+                  appendThinking(choice.delta.reasoning_content);
+                  appendThinking(choice.delta.thinking);
+                }
+                if (choice && choice.message) {
+                  appendThinking(choice.message.reasoning);
+                  appendThinking(choice.message.reasoning_content);
+                  appendThinking(choice.message.thinking);
+                }
+                appendThinking(json.reasoning);
+                appendThinking(json.reasoning_content);
+                appendThinking(json.thinking);
               } catch (_) { /* ignore non-JSON */ }
             }
           }
@@ -236,6 +273,7 @@
         <div class="toolbar">
           <label for="effort" style="font-size:12px; color:var(--muted)">Effort</label>
           <select id="effort" style="background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 4px 6px;">
+            <option value="off">Off</option>
             <option value="low">Low</option>
             <option value="medium" selected>Medium</option>
             <option value="high">High</option>
