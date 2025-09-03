@@ -124,8 +124,19 @@ app.post('/api/v1/chat/completions', async (req, res) => {
   const controller = new AbortController();
   req.on('close', () => controller.abort());
 
+  // Sanitize messages: drop empty assistant placeholders and non-string contents
+  const rawMessages = Array.isArray(body.messages) ? body.messages : [];
+  const messages = rawMessages.filter(m => {
+    if (!m) return false;
+    const role = m.role;
+    const content = m.content;
+    if (role === 'assistant' && (content == null || String(content).trim() === '')) return false;
+    return typeof content === 'string';
+  });
+
   const upstreamBody = {
     ...body,
+    messages,
     model,
     stream: true,
   };
@@ -139,8 +150,8 @@ app.post('/api/v1/chat/completions', async (req, res) => {
   try {
     // Persist request payload (best-effort)
     try {
-      const userContents = Array.isArray(body.messages)
-        ? body.messages.filter(m => m && m.role === 'user').map(m => m.content).join('\n\n')
+      const userContents = Array.isArray(rawMessages)
+        ? rawMessages.filter(m => m && m.role === 'user' && typeof m.content === 'string').map(m => m.content).join('\n\n')
         : null;
       await query(
         'INSERT INTO chat_logs (session_id, direction, role, content, model, meta) VALUES ($1,$2,$3,$4,$5,$6)',

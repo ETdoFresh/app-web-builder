@@ -150,6 +150,13 @@
               if (!line || line === '[DONE]') continue;
               try {
                 const json = JSON.parse(line);
+                // Surface explicit error frames from server
+                if (json && json.error) {
+                  const detail = json.detail ? `\nDetail: ${String(json.detail).slice(0, 500)}` : '';
+                  placeholder.content += `\n\n[Error] ${json.error}${detail}`;
+                  renderMessages();
+                  continue;
+                }
                 const choice = json.choices && json.choices[0];
                 if (choice && choice.delta && typeof choice.delta.content === 'string') {
                   placeholder.content += choice.delta.content;
