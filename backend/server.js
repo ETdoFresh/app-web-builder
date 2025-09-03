@@ -34,7 +34,7 @@ app.get('/api/db-health', async (req, res) => {
 });
 
 // --- Chat Logs API ---
-// List chat sessions with counts and last activity
+// List chat sessions with counts and last activity (and optional display name)
 app.get('/api/v1/chat/sessions', async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '50', 10)));
@@ -49,8 +49,10 @@ app.get('/api/v1/chat/sessions', async (req, res) => {
           WHERE session_id IS NOT NULL AND session_id <> ''
           GROUP BY session_id
       )
-      SELECT * FROM agg
-      ORDER BY last_activity DESC
+      SELECT a.session_id, a.count, a.first_activity, a.last_activity, s.name
+        FROM agg a
+        LEFT JOIN chat_sessions s ON s.session_id = a.session_id
+      ORDER BY a.last_activity DESC
       LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
@@ -66,6 +68,7 @@ app.get('/api/v1/chat/sessions', async (req, res) => {
       total: Number(totalRes.rows?.[0]?.total || 0),
       sessions: result.rows.map(r => ({
         session_id: r.session_id,
+        name: r.name || null,
         count: Number(r.count || 0),
         first_activity: r.first_activity,
         last_activity: r.last_activity,
@@ -75,6 +78,49 @@ app.get('/api/v1/chat/sessions', async (req, res) => {
     const detail = (err && err.message) ? err.message : String(err);
     console.error('List sessions failed:', detail);
     res.status(500).json({ ok: false, error: detail });
+  }
+});
+
+// Upsert a session display name
+app.patch('/api/v1/chat/sessions/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ ok: false, error: 'Missing session id' });
+    const name = (req.body && typeof req.body.name === 'string') ? req.body.name.trim() : null;
+    const result = await query(
+      `INSERT INTO chat_sessions (session_id, name)
+         VALUES ($1, $2)
+       ON CONFLICT (session_id)
+       DO UPDATE SET name = EXCLUDED.name, updated_at = now()
+       RETURNING session_id, name, created_at, updated_at`,
+      [id, name]
+    );
+    res.json({ ok: true, session: result.rows[0] });
+  } catch (err) {
+    const detail = (err && err.message) ? err.message : String(err);
+    console.error('Upsert session failed:', detail);
+    res.status(500).json({ ok: false, error: detail });
+  }
+});
+
+// Delete a session and its logs
+app.delete('/api/v1/chat/sessions/:id', async (req, res) => {
+  const client = await require('./db').pool.connect();
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ ok: false, error: 'Missing session id' });
+    await client.query('BEGIN');
+    await client.query('DELETE FROM chat_logs WHERE session_id = $1', [id]);
+    await client.query('DELETE FROM chat_sessions WHERE session_id = $1', [id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    const detail = (err && err.message) ? err.message : String(err);
+    console.error('Delete session failed:', detail);
+    res.status(500).json({ ok: false, error: detail });
+  } finally {
+    client.release();
   }
 });
 

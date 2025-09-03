@@ -39,6 +39,15 @@ async function ensureTables() {
     );
     CREATE INDEX IF NOT EXISTS chat_logs_created_at_idx ON chat_logs(created_at);
     CREATE INDEX IF NOT EXISTS chat_logs_session_idx ON chat_logs(session_id);
+
+    -- Optional metadata table for sessions (e.g., display names)
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      session_id TEXT PRIMARY KEY,
+      name TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS chat_sessions_updated_at_idx ON chat_sessions(updated_at);
   `);
 }
 

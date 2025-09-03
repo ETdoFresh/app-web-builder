@@ -45,7 +45,7 @@
     .dot.ok { background: var(--good); box-shadow: 0 0 10px rgba(53,208,127,0.6); }
     .dot.err { background: var(--danger); box-shadow: 0 0 10px rgba(255,107,107,0.6); }
 
-    .wrap { max-width: 900px; margin: 0 auto; width: 100%; flex: 1; display: flex; flex-direction: column; }
+    .wrap { max-width: 1200px; margin: 0 auto; width: 100%; flex: 1; display: flex; flex-direction: column; }
     .messages { flex: 1; padding: 20px 16px 120px; overflow-y: auto; }
     .msg { display: flex; gap: 12px; margin: 12px 0; }
     .avatar { width: 32px; height: 32px; border-radius: 6px; background: var(--panel-2); display: grid; place-items: center; font-weight: 700; color: var(--muted); }
@@ -68,14 +68,59 @@
     .toolbar { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
     .link { color: var(--accent); text-decoration: none; }
     .status .sep { opacity: 0.6; }
+
+    /* Layout with collapsible sidebar */
+    .layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+    .layout.sidebar-collapsed { grid-template-columns: 0 1fr; }
+    .sidebar { overflow: hidden; border-right: 1px solid rgba(255,255,255,0.08); background: rgba(10, 12, 30, 0.3); }
+    .sidebar .head { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); display:flex; gap:8px; align-items:center; }
+    .sidebar .head button { background: var(--panel-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); padding: 8px 10px; border-radius:8px; cursor:pointer; font-weight:600; }
+    .sidebar .list { overflow:auto; max-height: calc(100vh - 160px); }
+    .item { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .item:hover { background: #1a1f4d; }
+    .item.active { background: linear-gradient(135deg, rgba(124,138,255,0.2), rgba(159,122,234,0.15)); border-left: 3px solid var(--accent); }
+    .item .name { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .meta { font-size: 11px; color: var(--muted); opacity: 0.9; }
+    .item .actions { display:flex; gap:6px; }
+    .item .actions a { color: var(--muted); font-size: 12px; text-decoration:none; }
+    .content { display:flex; flex-direction:column; }
+    .toggle-btn { background: var(--panel-2); color: var(--text); border: 1px solid rgba(255,255,255,0.12); padding: 6px 10px; border-radius:8px; cursor:pointer; font-weight:600; }
   </style>
   <script>
-    const sessionKey = 'chat_session_id_v1';
+    const currentSessionKey = 'chat_current_session_id_v1';
     const thinkingPrefKey = 'chat_thinking_open_v1';
-    function getSessionId() {
-      let id = localStorage.getItem(sessionKey);
-      if (!id) { id = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)); localStorage.setItem(sessionKey, id); }
-      return id;
+    const sidebarOpenKey = 'chat_sidebar_open_v1';
+    const localNamesKey = 'chat_session_names_v1';
+
+    let currentSessionId = null; // Lazily created on first send if needed
+    let allSessions = []; // from backend
+    let localNames = {};
+
+    try { const saved = JSON.parse(localStorage.getItem(localNamesKey) || '{}'); if (saved && typeof saved === 'object') localNames = saved; } catch {}
+    // Intentionally do not auto-restore prior session id: default to a new session until first send
+
+    function setCurrentSessionId(id) {
+      currentSessionId = id || null;
+      try { if (id) localStorage.setItem(currentSessionKey, id); else localStorage.removeItem(currentSessionKey); } catch {}
+      updateSessionLabel();
+      renderSessionList();
+    }
+
+    function ensureSessionId() {
+      if (!currentSessionId) {
+        const id = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+        setCurrentSessionId(id);
+      }
+      return currentSessionId;
+    }
+
+    function nameFor(id) {
+      const server = allSessions.find(s => s.session_id === id);
+      return (server && server.name) || localNames[id] || null;
+    }
+
+    function saveLocalNames() {
+      try { localStorage.setItem(localNamesKey, JSON.stringify(localNames)); } catch {}
     }
 
     // Persisted user preference: whether "Thinking…" is expanded
@@ -87,6 +132,7 @@
     }
 
     let messages = [];
+    let isLoadingLogs = false;
     function addMessage(role, content) {
       messages.push({ role, content });
       renderMessages();
@@ -186,7 +232,8 @@
           ...messagesToSend,
         ];
       }
-      const body = { messages: messagesToSend, session_id: getSessionId() };
+      const sessionId = ensureSessionId();
+      const body = { messages: messagesToSend, session_id: sessionId };
       if (effort && effort !== 'off') {
         body.reasoning = { effort };
       }
@@ -269,6 +316,17 @@
           }
         }
         console.log('[Chat] Stream complete. Assistant chars:', (placeholder.content || '').length);
+        // If we had a local name for this session but it wasn't saved server-side yet, persist it now
+        const desiredName = localNames[sessionId];
+        if (desiredName && !((allSessions||[]).some(s => s.session_id === sessionId && s.name === desiredName))) {
+          try {
+            await fetch(`/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: desiredName })
+            });
+          } catch {}
+          // Refresh sessions list
+          try { await loadSessions(); } catch {}
+        }
         renderMessages();
       } catch (e) {
         console.error('[Chat] Streaming error', e);
@@ -289,12 +347,185 @@
       renderMessages();
     }
 
+    async function loadSessions() {
+      const res = await fetch('/api/v1/chat/sessions?limit=200');
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Failed to load sessions');
+      allSessions = data.sessions || [];
+      renderSessionList();
+    }
+
+    function renderSessionList() {
+      const list = document.getElementById('sessionList');
+      if (!list) return;
+      list.innerHTML = '';
+      const empty = document.createElement('div');
+      if (!allSessions.length) {
+        empty.className = 'item';
+        empty.style.opacity = '0.8';
+        empty.textContent = 'No sessions';
+        list.appendChild(empty);
+      } else {
+        allSessions.forEach(s => {
+          const el = document.createElement('div');
+          el.className = 'item' + (s.session_id === currentSessionId ? ' active' : '');
+          el.onclick = (e) => { if (e.target.closest('.actions')) return; selectSession(s.session_id); };
+          const left = document.createElement('div');
+          left.style.display = 'flex';
+          left.style.flexDirection = 'column';
+          const name = document.createElement('div');
+          name.className = 'name';
+          name.textContent = s.name || s.session_id;
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          meta.textContent = s.session_id;
+          left.appendChild(name);
+          left.appendChild(meta);
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          const rn = document.createElement('a'); rn.href = '#'; rn.textContent = 'Rename'; rn.onclick = (e) => { e.preventDefault(); renameSession(s.session_id); };
+          const del = document.createElement('a'); del.href = '#'; del.textContent = 'Delete'; del.style.color = 'var(--danger)'; del.onclick = (e) => { e.preventDefault(); deleteSession(s.session_id); };
+          actions.appendChild(rn); actions.appendChild(del);
+
+          el.appendChild(left);
+          el.appendChild(actions);
+          list.appendChild(el);
+        });
+      }
+
+      // Render pending new session indicator if current is not in server sessions yet
+      if (currentSessionId && !(allSessions || []).some(s => s.session_id === currentSessionId)) {
+        const el = document.createElement('div');
+        el.className = 'item active';
+        const left = document.createElement('div');
+        left.style.display = 'flex';
+        left.style.flexDirection = 'column';
+        const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = nameFor(currentSessionId) || 'New chat';
+        const mt = document.createElement('div'); mt.className = 'meta'; mt.textContent = `${currentSessionId} (unsent)`;
+        left.appendChild(nm); left.appendChild(mt);
+        const actions = document.createElement('div'); actions.className = 'actions';
+        const rn = document.createElement('a'); rn.href = '#'; rn.textContent = 'Rename'; rn.onclick = (e)=>{ e.preventDefault(); renameSession(currentSessionId); };
+        const del = document.createElement('a'); del.href = '#'; del.textContent = 'Discard'; del.style.color = 'var(--danger)'; del.onclick = (e)=>{ e.preventDefault(); discardCurrentSession(); };
+        actions.appendChild(rn); actions.appendChild(del);
+        el.appendChild(left); el.appendChild(actions);
+        list.prepend(el);
+      }
+    }
+
+    function discardCurrentSession() {
+      // Remove local name, clear messages, and unset current session ID
+      if (currentSessionId && localNames[currentSessionId]) { delete localNames[currentSessionId]; saveLocalNames(); }
+      setCurrentSessionId(null);
+      messages = [];
+      renderMessages();
+    }
+
+    function updateSessionLabel() {
+      const el = document.getElementById('currSessionLabel');
+      if (!el) return;
+      const id = currentSessionId;
+      if (!id) { el.textContent = 'New chat'; return; }
+      const nm = nameFor(id);
+      el.textContent = nm ? `${nm}` : id;
+    }
+
+    async function selectSession(id) {
+      setCurrentSessionId(id);
+      await loadLogsForSession(id).catch(() => {});
+    }
+
+    async function loadLogsForSession(id) {
+      isLoadingLogs = true;
+      try {
+        const res = await fetch(`/api/v1/chat/logs?session_id=${encodeURIComponent(id)}&order=asc&limit=500`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Failed to load logs');
+        const logs = data.logs || [];
+        messages = [];
+        logs.forEach(l => {
+          if (l.direction === 'request' && typeof l.content === 'string' && l.content) {
+            messages.push({ role: 'user', content: l.content });
+          } else if (l.direction === 'response' && typeof l.content === 'string') {
+            messages.push({ role: 'assistant', content: l.content });
+          }
+        });
+        renderMessages();
+      } finally {
+        isLoadingLogs = false;
+      }
+    }
+
+    async function renameSession(id) {
+      const curr = nameFor(id) || '';
+      const val = prompt('Enter a name for this session:', curr);
+      if (val === null) return;
+      const name = String(val).trim();
+      if (!name) { delete localNames[id]; saveLocalNames(); try { await saveServerName(id, null); } catch {} renderSessionList(); updateSessionLabel(); return; }
+      localNames[id] = name; saveLocalNames();
+      // If this session exists on the server already, persist now; otherwise defer until first send
+      if ((allSessions||[]).some(s => s.session_id === id)) {
+        try { await saveServerName(id, name); await loadSessions(); } catch {}
+      }
+      renderSessionList();
+      updateSessionLabel();
+    }
+
+    async function saveServerName(id, name) {
+      return fetch(`/api/v1/chat/sessions/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name })
+      }).then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(t||'Failed to save name'); }));
+    }
+
+    async function deleteSession(id) {
+      if (!confirm('Delete this session and all its messages?')) return;
+      try {
+        await fetch(`/api/v1/chat/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      } catch {}
+      if (currentSessionId === id) {
+        // Move to a fresh session
+        setCurrentSessionId(null);
+        messages = [];
+        renderMessages();
+      }
+      try { await loadSessions(); } catch {}
+    }
+
+    function newSession() {
+      // Set a new ID but do not touch the server until first send
+      const id = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2));
+      setCurrentSessionId(id);
+      messages = [];
+      renderMessages();
+    }
+
     window.addEventListener('load', () => {
       checkHealth();
       setInterval(checkHealth, 5000);
       updateTime();
       setInterval(updateTime, 1000);
+      // Load sessions list and choose starting state
+      loadSessions().catch(() => {});
+      updateSessionLabel();
+      // Restore sidebar state
+      const openPref = (() => { try { return JSON.parse(localStorage.getItem(sidebarOpenKey) || 'true'); } catch { return true; } })();
+      setSidebarOpen(!!openPref);
     });
+
+    function setSidebarOpen(open) {
+      const layout = document.getElementById('layout');
+      if (!layout) return;
+      if (open) layout.classList.remove('sidebar-collapsed');
+      else layout.classList.add('sidebar-collapsed');
+      try { localStorage.setItem(sidebarOpenKey, JSON.stringify(!!open)); } catch {}
+    }
+
+    function toggleSidebar() {
+      const layout = document.getElementById('layout');
+      if (!layout) return;
+      const isCollapsed = layout.classList.contains('sidebar-collapsed');
+      setSidebarOpen(isCollapsed);
+    }
   </script>
 </head>
 <body>
@@ -312,7 +543,23 @@
     </div>
   </header>
   <div class="wrap">
-    <div class="messages" id="messages"></div>
+    <div style="padding: 8px 16px; display:flex; align-items:center; gap:8px; justify-content:space-between;">
+      <button class="toggle-btn" onclick="toggleSidebar()">☰ Sessions</button>
+      <div class="toolbar" style="margin:0;">
+        <span>Session: <code style="opacity:0.9"><span id="currSessionLabel"></span></code></span>
+      </div>
+    </div>
+    <div class="layout sidebar-collapsed" id="layout">
+      <aside class="sidebar">
+        <div class="head">
+          <button onclick="newSession()">+ New Session</button>
+        </div>
+        <div class="list" id="sessionList"></div>
+      </aside>
+      <main class="content">
+        <div class="messages" id="messages"></div>
+      </main>
+    </div>
   </div>
   <div class="composer">
     <div class="inner">
@@ -328,8 +575,7 @@
             <option value="high">High</option>
           </select>
           <a class="link" href="#" onclick="clearChat(); return false;">Clear</a>
-          <span>Session: <code style="opacity:0.8">local</code></span>
-        </div>
+      </div>
       </div>
     </div>
   </div>
