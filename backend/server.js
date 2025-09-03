@@ -122,7 +122,11 @@ app.post('/api/v1/chat/completions', async (req, res) => {
   }
 
   const controller = new AbortController();
-  req.on('close', () => controller.abort());
+  let clientAborted = false;
+  let finished = false;
+  // Prefer 'aborted' to detect early client cancellations
+  req.on('aborted', () => { clientAborted = true; try { controller.abort(); } catch {} });
+  req.on('close', () => { if (!finished) { clientAborted = true; try { controller.abort(); } catch {} } });
   const debugEnabled = (() => {
     const v = String(req.query?.debug || req.headers['x-debug'] || '').toLowerCase();
     return v === '1' || v === 'true' || v === 'yes' || v === 'on';
@@ -243,6 +247,7 @@ app.post('/api/v1/chat/completions', async (req, res) => {
       const dbg = { type: 'response_summary', status: orRes.status, assistant_chars: assistantText.length };
       res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
     }
+    finished = true;
     res.end();
 
     // Persist response payload (best-effort)
@@ -255,13 +260,15 @@ app.post('/api/v1/chat/completions', async (req, res) => {
       console.warn('Failed to persist response log:', e.message);
     }
   } catch (err) {
-    const msg = (err && err.name === 'AbortError') ? 'client_disconnected' : (err && err.message) ? err.message : String(err);
-    // Ensure valid SSE frame on error if headers already sent
+    const isAbort = err && err.name === 'AbortError';
+    const msg = isAbort && clientAborted ? 'client_disconnected' : (err && err.message) ? err.message : String(err);
     if (!res.headersSent) {
-      res.status(500).json({ error: msg });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: msg })}\n\n`);
-      res.end();
+      try { res.status(500).json({ error: msg }); } catch {}
+      return;
+    }
+    if (!res.writableEnded) {
+      try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch {}
+      try { res.end(); } catch {}
     }
   }
 });

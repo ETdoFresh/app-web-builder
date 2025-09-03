@@ -125,7 +125,9 @@
       messages.push(placeholder);
       renderMessages();
 
-      const body = { messages, session_id: getSessionId() };
+      // Send only user/system/tool messages; UI assistant placeholder is local-only
+      const messagesToSend = messages.filter(m => m && (m.role === 'user' || m.role === 'system' || m.role === 'tool'));
+      const body = { messages: messagesToSend, session_id: getSessionId() };
       console.log('[Chat] Request body to backend', body);
       try {
         const res = await fetch('/api/v1/chat/completions?debug=1', {
