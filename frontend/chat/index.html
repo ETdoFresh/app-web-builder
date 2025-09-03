@@ -127,7 +127,9 @@
 
       // Send only user/system/tool messages; UI assistant placeholder is local-only
       const messagesToSend = messages.filter(m => m && (m.role === 'user' || m.role === 'system' || m.role === 'tool'));
-      const body = { messages: messagesToSend, session_id: getSessionId() };
+      const effortSel = document.getElementById('effort');
+      const effort = effortSel && effortSel.value ? effortSel.value : 'medium';
+      const body = { messages: messagesToSend, session_id: getSessionId(), reasoning: { effort } };
       console.log('[Chat] Request body to backend', body);
       try {
         const res = await fetch('/api/v1/chat/completions?debug=1', {
@@ -232,6 +234,12 @@
       <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end; min-width: 120px;">
         <button onclick="sendMessage()">Send ↵</button>
         <div class="toolbar">
+          <label for="effort" style="font-size:12px; color:var(--muted)">Effort</label>
+          <select id="effort" style="background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 4px 6px;">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
           <a class="link" href="#" onclick="clearChat(); return false;">Clear</a>
           <span>Session: <code style="opacity:0.8">local</code></span>
         </div>

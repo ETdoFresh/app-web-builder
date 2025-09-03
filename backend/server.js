@@ -177,6 +177,7 @@ app.post('/api/v1/chat/completions', async (req, res) => {
         message_count: Array.isArray(upstreamBody.messages) ? upstreamBody.messages.length : 0,
         messages: upstreamBody.messages,
         referer,
+        reasoning: upstreamBody.reasoning || null,
       };
       res.write(`event: debug\n`);
       res.write(`data: ${JSON.stringify(dbg)}\n\n`);
