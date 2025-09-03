@@ -67,6 +67,24 @@
     .composer button:disabled { opacity: 0.6; cursor: not-allowed; }
     .toolbar { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
     .link { color: var(--accent); text-decoration: none; }
+
+    /* Time widget (similar to hub) */
+    .time-display {
+      position: fixed;
+      top: 14px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 20;
+    }
   </style>
   <script>
     const sessionKey = 'chat_session_id_v1';
@@ -89,6 +107,19 @@
     function addMessage(role, content) {
       messages.push({ role, content });
       renderMessages();
+    }
+
+    // Update time display
+    function updateTime() {
+      const el = document.getElementById('timeText');
+      if (!el) return;
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      el.textContent = timeString;
     }
 
     function renderMessages() {
@@ -272,6 +303,8 @@
     window.addEventListener('load', () => {
       checkHealth();
       setInterval(checkHealth, 5000);
+      updateTime();
+      setInterval(updateTime, 1000);
     });
   </script>
 </head>
@@ -287,6 +320,7 @@
       </div>
     </div>
   </header>
+  <div class="time-display"><span id="timeText"></span></div>
   <div class="wrap">
     <div class="messages" id="messages"></div>
   </div>
