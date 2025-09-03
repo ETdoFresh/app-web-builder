@@ -17,8 +17,5 @@ RUN npm run install:all
 # Copy the rest of the source
 COPY . .
 
-# Expose dev ports
-EXPOSE 3000
-
 # Start all services concurrently
 CMD ["npm", "start"]
