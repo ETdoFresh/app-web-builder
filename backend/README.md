@@ -14,6 +14,7 @@ DATABASE_URL=postgresql://username:password@host:5432/database
 # PGPOOL_MAX=10         # Optional: pool size
 # PGPOOL_IDLE=30000     # Optional: idle timeout (ms)
 # PG_CONNECT_TIMEOUT=5000
+# OPENROUTER_SITE_URL=https://your-domain.example   # Optional: forces HTTP-Referer sent to OpenRouter
 ```
 
 Local Development
@@ -55,3 +56,4 @@ History APIs
 Notes
 - The server loads env from the repo root `.env` first, then `backend/.env` if present (for backwards compatibility).
 - If connecting to a managed Postgres that enforces TLS, set `PGSSL=true` in `.env`.
+ - If you see `response_error 404` from OpenRouter with a privacy link, add your site domain to OpenRouter Allowed Domains or set `OPENROUTER_SITE_URL` to a permitted URL.

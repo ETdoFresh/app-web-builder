@@ -172,6 +172,7 @@ app.post('/api/v1/chat/completions', async (req, res) => {
         model,
         message_count: Array.isArray(upstreamBody.messages) ? upstreamBody.messages.length : 0,
         messages: upstreamBody.messages,
+        referer,
       };
       res.write(`event: debug\n`);
       res.write(`data: ${JSON.stringify(dbg)}\n\n`);
@@ -188,7 +189,9 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     } catch (e) {
       console.warn('Failed to persist request log:', e.message);
     }
-    const referer = req.headers['origin'] || req.headers['referer'] || 'http://localhost:3000';
+    // Compute Referer per OpenRouter's browser-origin requirements
+    const siteUrlEnv = process.env.OPENROUTER_SITE || process.env.OPENROUTER_SITE_URL;
+    const referer = siteUrlEnv || req.headers['origin'] || req.headers['referer'] || 'http://localhost:3000';
     const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
