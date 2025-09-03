@@ -145,11 +145,18 @@
 
     async function checkHealth() {
       const label = document.getElementById('healthlabel');
+      const dot = document.getElementById('healthdot');
       try {
         const r = await fetch('/api/health');
-        if (r.ok) { label.textContent = 'Backend: Healthy'; }
-        else { label.textContent = 'Backend: Error'; }
+        if (r.ok) {
+          if (dot) { dot.classList.add('ok'); dot.classList.remove('err'); }
+          label.textContent = 'Backend: Healthy';
+        } else {
+          if (dot) { dot.classList.add('err'); dot.classList.remove('ok'); }
+          label.textContent = 'Backend: Error';
+        }
       } catch {
+        if (dot) { dot.classList.add('err'); dot.classList.remove('ok'); }
         label.textContent = 'Backend: Offline';
       }
     }
@@ -299,6 +306,7 @@
       <div class="status">
         <span id="timeText"></span>
         <span class="sep">|</span>
+        <span class="dot" id="healthdot"></span>
         <span id="healthlabel">Checking...</span>
       </div>
     </div>
