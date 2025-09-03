@@ -26,6 +26,11 @@ dist-ssr/
 **/.env.local
 **/.env.*
 
+# Allow example env files to be tracked
+!**/.env.example
+!**/.env.sample
+!**/.env.template
+
 # Logs
 logs/
 *.log

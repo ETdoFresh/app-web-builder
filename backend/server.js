@@ -1,5 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
+// Load env from repo root first, then backend/.env (if present)
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');

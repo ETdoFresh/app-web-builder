@@ -1,9 +1,13 @@
 const http = require('http');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Support PROXY_PORT to avoid clashing with backend's PORT when using a single root .env
+const PORT = Number(process.env.PROXY_PORT || process.env.PORT || 3000);
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';

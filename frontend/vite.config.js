@@ -2,7 +2,10 @@ import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  // Load env from repo root first, then frontend/.env (frontend overrides root if both set)
+  const rootEnv = loadEnv(mode, resolve(process.cwd(), '..'), '');
+  const localEnv = loadEnv(mode, process.cwd(), '');
+  const env = { ...rootEnv, ...localEnv };
   const hmrHost = env.VITE_HMR_HOST || undefined;
   const hmrProtocol = env.VITE_HMR_PROTOCOL || undefined; // ws | wss
   const hmrPort = env.VITE_HMR_PORT ? Number(env.VITE_HMR_PORT) : undefined;

@@ -4,9 +4,11 @@ Overview
 - Express server with PostgreSQL via `pg` and `.env` configuration.
 
 Environment
-- Create `backend/.env` based on `.env.example`:
+- Create a single `.env` at the repository root based on `/.env.example`:
 
 ```
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=...
 DATABASE_URL=postgresql://username:password@host:5432/database
 # PGSSL=true            # Uncomment if your DB requires SSL
 # PGPOOL_MAX=10         # Optional: pool size
@@ -43,5 +45,5 @@ Persistence
 
 
 Notes
-- The server loads env from `backend/.env` explicitly, so it works regardless of the working directory or the Docker context.
+- The server loads env from the repo root `.env` first, then `backend/.env` if present (for backwards compatibility).
 - If connecting to a managed Postgres that enforces TLS, set `PGSSL=true` in `.env`.
