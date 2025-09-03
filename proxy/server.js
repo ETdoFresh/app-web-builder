@@ -20,6 +20,11 @@ app.get(['/chat', '/chat/'], (req, res) => {
   res.redirect(301, '/chat/index.html');
 });
 
+// Normalize history routes similarly
+app.get(['/history', '/history/'], (req, res) => {
+  res.redirect(301, '/history/index.html');
+});
+
 // --- Backend API proxy ---
 const apiProxy = createProxyMiddleware({
   target: BACKEND_URL,

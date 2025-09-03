@@ -23,6 +23,7 @@ export default defineConfig(({ mode }) => {
         input: {
           main: resolve(process.cwd(), 'index.html'),
           chat: resolve(process.cwd(), 'chat/index.html'),
+          history: resolve(process.cwd(), 'history/index.html'),
         }
       }
     },

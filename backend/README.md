@@ -43,6 +43,14 @@ Persistence
   - `direction='response'` with the streamed assistant text in `content` and upstream status in `meta`.
 - Field `session_id` comes from request body `session_id` or an auto-generated ID.
 
+History APIs
+- List sessions (with counts and activity):
+  - `GET /api/v1/chat/sessions?limit=50&offset=0`
+  - Response: `{ ok, total, sessions: [{ session_id, count, first_activity, last_activity }] }`
+- List logs (optionally by session):
+  - `GET /api/v1/chat/logs?session_id=abc&order=asc&limit=200&offset=0`
+  - Response: `{ ok, logs: [{ id, session_id, direction, role, content, model, meta, created_at }] }`
+
 
 Notes
 - The server loads env from the repo root `.env` first, then `backend/.env` if present (for backwards compatibility).

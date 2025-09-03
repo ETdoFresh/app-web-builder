@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>History • Chat Logs</title>
+  <style>
+    :root {
+      --bg: #0f1226;
+      --panel: #15193a;
+      --panel-2: #1a1f4d;
+      --text: #e6e8ff;
+      --muted: #9aa3ff;
+      --accent: #7c8aff;
+      --accent-2: #9f7aea;
+      --danger: #ff6b6b;
+      --good: #35d07f;
+      --border: rgba(255,255,255,0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial; background: var(--bg); color: var(--text); min-height: 100vh; display:flex; flex-direction:column; }
+    header { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(8px); background: rgba(10, 12, 30, 0.6); border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .nav { display:flex; align-items:center; justify-content: space-between; gap: 12px; padding: 14px 16px; max-width: 1100px; margin: 0 auto; }
+    .nav a { color: var(--muted); text-decoration: none; }
+    .status { display:flex; align-items:center; gap:8px; color: var(--muted); font-size: 13px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#888; box-shadow:0 0 8px rgba(255,255,255,0.1);} .dot.ok { background: var(--good); box-shadow:0 0 10px rgba(53,208,127,0.6);} .dot.err { background: var(--danger); box-shadow:0 0 10px rgba(255,107,107,0.6);} 
+    .wrap { max-width: 1100px; margin: 0 auto; width: 100%; display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; flex:1; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+    .sidebar { display:flex; flex-direction:column; overflow:hidden; }
+    .sidebar .head { padding: 12px; border-bottom: 1px solid var(--border); display:flex; gap:8px; align-items:center; }
+    .sidebar input { width:100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius:8px; padding: 10px; outline:none; }
+    .sessions { overflow:auto; max-height: calc(100vh - 180px); }
+    .session { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor:pointer; }
+    .session:hover { background: #1a1f4d; }
+    .session.active { background: linear-gradient(135deg, rgba(124,138,255,0.2), rgba(159,122,234,0.15)); border-left: 3px solid var(--accent); }
+    .session .id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size: 12px; opacity: 0.9; }
+    .session .meta { font-size: 12px; color: var(--muted); margin-top: 4px; display:flex; gap:8px; }
+    .content { display:flex; flex-direction:column; overflow:hidden; }
+    .content .toolbar { display:flex; align-items:center; justify-content: space-between; padding: 12px; border-bottom: 1px solid var(--border); }
+    .content .toolbar .group { display:flex; gap:8px; align-items:center; }
+    .content .toolbar button, .content .toolbar select { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 8px; cursor:pointer; }
+    .logs { padding: 12px; overflow:auto; max-height: calc(100vh - 180px); }
+    .log { display:flex; gap:12px; margin: 10px 0; }
+    .badge { font-size: 11px; padding: 4px 8px; border-radius: 999px; border:1px solid var(--border); background:#1a1f4d; color: var(--muted); }
+    .when { font-size: 12px; color: var(--muted); }
+    .bubble { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); max-width: 100%; }
+    .bubble pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; }
+    .rowhead { display:flex; gap:8px; align-items:center; margin-bottom: 6px; }
+    details { margin-top: 8px; }
+    summary { cursor: pointer; color: var(--muted); }
+  </style>
+  <script>
+    async function checkHealth() {
+      const dot = document.getElementById('healthdot');
+      const label = document.getElementById('healthlabel');
+      try {
+        const r = await fetch('/api/health');
+        if (r.ok) { dot.classList.add('ok'); dot.classList.remove('err'); label.textContent = 'Backend: Healthy'; }
+        else { dot.classList.add('err'); dot.classList.remove('ok'); label.textContent = 'Backend: Error'; }
+      } catch {
+        dot.classList.add('err'); dot.classList.remove('ok'); label.textContent = 'Backend: Offline';
+      }
+    }
+
+    let allSessions = [];
+    let selectedSession = null;
+
+    async function loadSessions() {
+      const res = await fetch('/api/v1/chat/sessions?limit=200');
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Failed to load sessions');
+      allSessions = data.sessions || [];
+      renderSessions();
+      if (!selectedSession && allSessions.length) {
+        selectSession(allSessions[0].session_id);
+      }
+    }
+
+    function renderSessions() {
+      const filter = document.getElementById('filter').value.trim().toLowerCase();
+      const list = document.getElementById('sessions');
+      list.innerHTML = '';
+      const items = allSessions.filter(s => !filter || String(s.session_id).toLowerCase().includes(filter));
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.style.padding = '12px';
+        empty.style.color = 'var(--muted)';
+        empty.textContent = 'No sessions';
+        list.appendChild(empty);
+      }
+      items.forEach(s => {
+        const el = document.createElement('div');
+        el.className = 'session' + (s.session_id === selectedSession ? ' active' : '');
+        el.onclick = () => selectSession(s.session_id);
+        const id = document.createElement('div');
+        id.className = 'id';
+        id.textContent = s.session_id;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const last = new Date(s.last_activity).toLocaleString();
+        meta.innerHTML = `<span>🕒 ${last}</span><span>•</span><span>${s.count} logs</span>`;
+        el.appendChild(id);
+        el.appendChild(meta);
+        list.appendChild(el);
+      });
+    }
+
+    async function selectSession(id) {
+      selectedSession = id;
+      renderSessions();
+      const label = document.getElementById('currSession');
+      if (label) label.textContent = selectedSession || '—';
+      await loadLogs();
+    }
+
+    let logs = [];
+    async function loadLogs() {
+      const list = document.getElementById('logs');
+      list.innerHTML = '<div style="padding:12px; color: var(--muted);">Loading…</div>';
+      const order = document.getElementById('order').value;
+      const url = selectedSession ? `/api/v1/chat/logs?session_id=${encodeURIComponent(selectedSession)}&order=${order}&limit=500` : `/api/v1/chat/logs?order=${order}&limit=200`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Failed to load logs');
+      logs = data.logs || [];
+      renderLogs();
+    }
+
+    function renderLogs() {
+      const list = document.getElementById('logs');
+      list.innerHTML = '';
+      if (!logs.length) {
+        const empty = document.createElement('div');
+        empty.style.padding = '12px';
+        empty.style.color = 'var(--muted)';
+        empty.textContent = 'No logs';
+        list.appendChild(empty);
+        return;
+      }
+      logs.forEach(row => {
+        const item = document.createElement('div');
+        item.className = 'log';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+
+        const rowhead = document.createElement('div');
+        rowhead.className = 'rowhead';
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = `${row.direction}${row.role ? ' • ' + row.role : ''}`;
+        const when = document.createElement('span');
+        when.className = 'when';
+        when.textContent = new Date(row.created_at).toLocaleString();
+        const model = document.createElement('span');
+        model.className = 'when';
+        model.textContent = row.model || '';
+        rowhead.appendChild(badge);
+        rowhead.appendChild(when);
+        if (row.model) { rowhead.appendChild(document.createTextNode(' • ')); rowhead.appendChild(model); }
+
+        const pre = document.createElement('pre');
+        pre.textContent = row.content || '';
+
+        bubble.appendChild(rowhead);
+        bubble.appendChild(pre);
+
+        if (row.meta) {
+          const det = document.createElement('details');
+          const sum = document.createElement('summary');
+          sum.textContent = 'Details (meta)';
+          const meta = document.createElement('pre');
+          meta.textContent = JSON.stringify(row.meta, null, 2);
+          det.appendChild(sum);
+          det.appendChild(meta);
+          bubble.appendChild(det);
+        }
+
+        item.appendChild(bubble);
+        list.appendChild(item);
+      });
+    }
+
+    function debounce(fn, ms) {
+      let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    window.addEventListener('load', () => {
+      checkHealth();
+      setInterval(checkHealth, 5000);
+      loadSessions().catch(err => {
+        const list = document.getElementById('sessions');
+        list.innerHTML = `<div style="padding:12px; color: var(--muted)">Error: ${err?.message || err}</div>`;
+      });
+      document.getElementById('filter').addEventListener('input', debounce(renderSessions, 150));
+      document.getElementById('order').addEventListener('change', () => loadLogs());
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <div class="nav">
+      <div>
+        <a href="/">← Back</a>
+      </div>
+      <div class="status">
+        <span class="dot" id="healthdot"></span>
+        <span id="healthlabel">Checking...</span>
+      </div>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="panel sidebar">
+      <div class="head">
+        <input id="filter" placeholder="Filter session id…" />
+      </div>
+      <div class="sessions" id="sessions"></div>
+    </div>
+    <div class="panel content">
+      <div class="toolbar">
+        <div class="group">
+          <span style="color:var(--muted)">Session:</span>
+          <code style="opacity:0.9"><span id="currSession"></span></code>
+        </div>
+        <div class="group">
+          <label for="order" style="color:var(--muted); font-size: 13px;">Order</label>
+          <select id="order">
+            <option value="asc" selected>Oldest → Newest</option>
+            <option value="desc">Newest → Oldest</option>
+          </select>
+          <button onclick="loadLogs()">Refresh</button>
+        </div>
+      </div>
+      <div class="logs" id="logs"></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -33,6 +33,78 @@ app.get('/api/db-health', async (req, res) => {
   }
 });
 
+// --- Chat Logs API ---
+// List chat sessions with counts and last activity
+app.get('/api/v1/chat/sessions', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit || '50', 10)));
+    const offset = Math.max(0, parseInt(req.query.offset || '0', 10));
+    const result = await query(
+      `WITH agg AS (
+         SELECT session_id,
+                COUNT(*) AS count,
+                MIN(created_at) AS first_activity,
+                MAX(created_at) AS last_activity
+           FROM chat_logs
+          WHERE session_id IS NOT NULL AND session_id <> ''
+          GROUP BY session_id
+      )
+      SELECT * FROM agg
+      ORDER BY last_activity DESC
+      LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    // Total sessions count for pagination (best effort)
+    const totalRes = await query(
+      `SELECT COUNT(DISTINCT session_id) AS total
+         FROM chat_logs
+        WHERE session_id IS NOT NULL AND session_id <> ''`
+    );
+    res.json({
+      ok: true,
+      total: Number(totalRes.rows?.[0]?.total || 0),
+      sessions: result.rows.map(r => ({
+        session_id: r.session_id,
+        count: Number(r.count || 0),
+        first_activity: r.first_activity,
+        last_activity: r.last_activity,
+      }))
+    });
+  } catch (err) {
+    const detail = (err && err.message) ? err.message : String(err);
+    console.error('List sessions failed:', detail);
+    res.status(500).json({ ok: false, error: detail });
+  }
+});
+
+// List chat logs; optional filter by session_id; supports ordering and pagination
+app.get('/api/v1/chat/logs', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit || '200', 10)));
+    const offset = Math.max(0, parseInt(req.query.offset || '0', 10));
+    const order = String(req.query.order || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+    const sessionId = req.query.session_id;
+
+    let sql = `SELECT id, session_id, direction, role, content, model, meta, created_at
+                 FROM chat_logs`;
+    const params = [];
+    if (sessionId) {
+      params.push(sessionId);
+      sql += ` WHERE session_id = $${params.length}`;
+    }
+    sql += ` ORDER BY created_at ${order} NULLS LAST, id ${order} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
+
+    const result = await query(sql, params);
+    res.json({ ok: true, logs: result.rows });
+  } catch (err) {
+    const detail = (err && err.message) ? err.message : String(err);
+    console.error('List logs failed:', detail);
+    res.status(500).json({ ok: false, error: detail });
+  }
+});
+
 // Streaming SSE proxy to OpenRouter chat completions
 // POST /api/v1/chat/completions  { messages: [...], ...optional }
 app.post('/api/v1/chat/completions', async (req, res) => {
