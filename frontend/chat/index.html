@@ -72,6 +72,21 @@
     .toolbar { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
     .link { color: var(--accent); text-decoration: none; }
     .status .sep { opacity: 0.6; }
+    /* Theme the Effort dropdown to match */
+    .toolbar select {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      padding: 6px 28px 6px 8px;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }
+    .toolbar select:hover { border-color: rgba(255,255,255,0.25); }
+    .toolbar select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(124,138,255,0.2); }
+    .toolbar select option { background: var(--panel); color: var(--text); }
 
     /* Layout with collapsible sidebar */
     .layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 60px); }
@@ -578,7 +593,7 @@
         <button onclick="sendMessage()">Send ↵</button>
         <div class="toolbar">
           <label for="effort" style="font-size:12px; color:var(--muted)">Effort</label>
-          <select id="effort" style="background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 4px 6px;">
+          <select id="effort">
             <option value="off">Off</option>
             <option value="low">Low</option>
             <option value="medium" selected>Medium</option>
