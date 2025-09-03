@@ -93,12 +93,6 @@
 
     function renderMessages() {
       const list = document.getElementById('messages');
-      // Preserve current open/closed state from DOM before re-render (if present)
-      const existingDetailsAll = list.querySelectorAll('details[data-thinking="1"]');
-      if (existingDetailsAll && existingDetailsAll.length) {
-        const lastDetails = existingDetailsAll[existingDetailsAll.length - 1];
-        setThinkingOpen(lastDetails.open);
-      }
       list.innerHTML = '';
       messages.forEach(m => {
         const item = document.createElement('div');
@@ -110,6 +104,7 @@
         bubble.className = 'bubble';
         // Thinking block: always on top when enabled, toggle show/hide via <details>
         if (m.role === 'assistant' && m.thinking_enabled) {
+          if (typeof m.thinking_open !== 'boolean') { m.thinking_open = thinkingOpenPref; }
           const details = document.createElement('details');
           details.setAttribute('data-thinking', '1');
           details.style.marginBottom = '8px';
@@ -117,8 +112,9 @@
           summary.textContent = 'Thinking…';
           const thinkPre = document.createElement('pre');
           thinkPre.textContent = (m.thinking && m.thinking.length) ? m.thinking : '';
-          if (thinkingOpenPref) details.setAttribute('open', 'open');
-          details.addEventListener('toggle', () => setThinkingOpen(details.open));
+          const shouldOpen = (typeof m.thinking_open === 'boolean') ? m.thinking_open : thinkingOpenPref;
+          if (shouldOpen) details.setAttribute('open', 'open');
+          details.addEventListener('toggle', () => { m.thinking_open = details.open; setThinkingOpen(details.open); });
           details.appendChild(summary);
           details.appendChild(thinkPre);
           bubble.appendChild(details);
@@ -157,7 +153,7 @@
       const effort = effortSel && effortSel.value ? effortSel.value : 'medium';
 
       // Prepare an assistant placeholder we can stream into
-      const placeholder = { role: 'assistant', content: '', thinking: '', thinking_enabled: effort !== 'off' };
+      const placeholder = { role: 'assistant', content: '', thinking: '', thinking_enabled: effort !== 'off', thinking_open: thinkingOpenPref };
       messages.push(placeholder);
       renderMessages();
 
@@ -171,21 +167,8 @@
         ];
       }
       const body = { messages: messagesToSend, session_id: getSessionId() };
-      // Read optional budget tokens input
-      const btEl = document.getElementById('budget_tokens');
-      const btRaw = (btEl && typeof btEl.value === 'string') ? btEl.value.trim() : '';
-      const btVal = btRaw === '' ? null : Number(btRaw);
-      const hasBudget = Number.isFinite(btVal) && btVal >= 0;
-      if (effort === 'off') {
-        if (hasBudget) {
-          body.reasoning = { budget_tokens: btVal };
-        } else {
-          // default to strictly zero when off
-          body.reasoning = { budget_tokens: 0 };
-        }
-      } else {
+      if (effort && effort !== 'off') {
         body.reasoning = { effort };
-        if (hasBudget) body.reasoning.budget_tokens = btVal;
       }
       console.log('[Chat] Request body to backend', body);
       try {
@@ -242,6 +225,7 @@
 
                 // Capture reasoning/thinking tokens if present from various providers
                 const appendThinking = (val) => {
+                  if (!placeholder.thinking_enabled) return;
                   if (typeof val === 'string' && val) {
                     placeholder.thinking += val;
                     renderMessages();
@@ -319,9 +303,6 @@
             <option value="medium" selected>Medium</option>
             <option value="high">High</option>
           </select>
-          <label for="budget_tokens" style="font-size:12px; color:var(--muted)">Max thinking tokens</label>
-          <input id="budget_tokens" type="number" min="0" step="1" placeholder="e.g. 512 or 0" 
-                 style="width:110px; background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 4px 6px;" />
           <a class="link" href="#" onclick="clearChat(); return false;">Clear</a>
           <span>Session: <code style="opacity:0.8">local</code></span>
         </div>
