@@ -93,20 +93,21 @@
         avatar.textContent = m.role === 'user' ? 'U' : 'A';
         const bubble = document.createElement('div');
         bubble.className = 'bubble';
-        const pre = document.createElement('pre');
-        pre.textContent = m.content || '';
-        bubble.appendChild(pre);
-        if (m.role === 'assistant' && m.thinking && m.thinking.trim()) {
+        // Thinking block: always on top when enabled, toggle show/hide via <details>
+        if (m.role === 'assistant' && m.thinking_enabled) {
           const details = document.createElement('details');
-          details.style.marginTop = '8px';
+          details.style.marginBottom = '8px';
           const summary = document.createElement('summary');
           summary.textContent = 'Thinking…';
           const thinkPre = document.createElement('pre');
-          thinkPre.textContent = m.thinking;
+          thinkPre.textContent = (m.thinking && m.thinking.length) ? m.thinking : '';
           details.appendChild(summary);
           details.appendChild(thinkPre);
           bubble.appendChild(details);
         }
+        const pre = document.createElement('pre');
+        pre.textContent = m.content || '';
+        bubble.appendChild(pre);
         item.appendChild(avatar);
         item.appendChild(bubble);
         list.appendChild(item);
@@ -133,15 +134,17 @@
       ta.value = '';
       addMessage('user', text);
 
+      // Determine reasoning-effort setting and whether to show thinking UI
+      const effortSel = document.getElementById('effort');
+      const effort = effortSel && effortSel.value ? effortSel.value : 'medium';
+
       // Prepare an assistant placeholder we can stream into
-      const placeholder = { role: 'assistant', content: '', thinking: '' };
+      const placeholder = { role: 'assistant', content: '', thinking: '', thinking_enabled: effort !== 'off' };
       messages.push(placeholder);
       renderMessages();
 
       // Send only user/system/tool messages; UI assistant placeholder is local-only
       const messagesToSend = messages.filter(m => m && (m.role === 'user' || m.role === 'system' || m.role === 'tool'));
-      const effortSel = document.getElementById('effort');
-      const effort = effortSel && effortSel.value ? effortSel.value : 'medium';
       const body = { messages: messagesToSend, session_id: getSessionId() };
       if (effort && effort !== 'off') {
         body.reasoning = { effort };
