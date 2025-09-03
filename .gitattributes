@@ -1,0 +1,13 @@
+# Normalize line endings across platforms
+# Default: treat text files as text and use LF in repo
+* text=auto eol=lf
+
+# Shell scripts must be LF
+*.sh text eol=lf
+
+# Windows scripts may use CRLF on checkout
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Ensure lockfiles keep LF (deterministic diffs)
+package-lock.json text eol=lf

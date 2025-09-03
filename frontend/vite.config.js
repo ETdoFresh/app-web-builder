@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import { resolve } from 'path';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -13,6 +14,15 @@ export default defineConfig(({ mode }) => {
     : true;
 
   return {
+    // Ensure multi-page build output so /chat works in production
+    build: {
+      rollupOptions: {
+        input: {
+          main: resolve(process.cwd(), 'index.html'),
+          chat: resolve(process.cwd(), 'chat/index.html'),
+        }
+      }
+    },
     server: {
       host: '0.0.0.0',
       port: 5173,
