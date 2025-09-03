@@ -123,6 +123,10 @@ app.post('/api/v1/chat/completions', async (req, res) => {
 
   const controller = new AbortController();
   req.on('close', () => controller.abort());
+  const debugEnabled = (() => {
+    const v = String(req.query?.debug || req.headers['x-debug'] || '').toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  })();
 
   // Sanitize messages: drop empty assistant placeholders and non-string contents
   const rawMessages = Array.isArray(body.messages) ? body.messages : [];
@@ -148,6 +152,17 @@ app.post('/api/v1/chat/completions', async (req, res) => {
   res.flushHeaders && res.flushHeaders();
 
   try {
+    // If debugging, emit a pre-flight debug frame with the outbound payload (sanitized)
+    if (debugEnabled) {
+      const dbg = {
+        type: 'request',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        model,
+        message_count: Array.isArray(upstreamBody.messages) ? upstreamBody.messages.length : 0,
+        messages: upstreamBody.messages,
+      };
+      res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
+    }
     // Persist request payload (best-effort)
     try {
       const userContents = Array.isArray(rawMessages)
@@ -176,6 +191,10 @@ app.post('/api/v1/chat/completions', async (req, res) => {
 
     if (!orRes.ok) {
       const text = await orRes.text().catch(() => '');
+      if (debugEnabled) {
+        const dbg = { type: 'response_error', status: orRes.status, statusText: orRes.statusText, body: text?.slice(0, 4000) };
+        res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
+      }
       res.write(`data: ${JSON.stringify({ error: `OpenRouter error ${orRes.status}`, detail: text })}\n\n`);
       return res.end();
     }
@@ -219,6 +238,10 @@ app.post('/api/v1/chat/completions', async (req, res) => {
           }
         }
       }
+    }
+    if (debugEnabled) {
+      const dbg = { type: 'response_summary', status: orRes.status, assistant_chars: assistantText.length };
+      res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
     }
     res.end();
 
