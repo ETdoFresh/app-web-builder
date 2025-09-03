@@ -67,24 +67,7 @@
     .composer button:disabled { opacity: 0.6; cursor: not-allowed; }
     .toolbar { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
     .link { color: var(--accent); text-decoration: none; }
-
-    /* Time widget (similar to hub) */
-    .time-display {
-      position: fixed;
-      top: 14px;
-      right: 16px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255,255,255,0.12);
-      padding: 8px 14px;
-      border-radius: 999px;
-      font-size: 13px;
-      color: var(--accent);
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      z-index: 20;
-    }
+    .status .sep { opacity: 0.6; }
   </style>
   <script>
     const sessionKey = 'chat_session_id_v1';
@@ -161,14 +144,13 @@
     }
 
     async function checkHealth() {
-      const dot = document.getElementById('healthdot');
       const label = document.getElementById('healthlabel');
       try {
         const r = await fetch('/api/health');
-        if (r.ok) { dot.classList.add('ok'); dot.classList.remove('err'); label.textContent = 'Backend: Healthy'; }
-        else { dot.classList.add('err'); dot.classList.remove('ok'); label.textContent = 'Backend: Error'; }
+        if (r.ok) { label.textContent = 'Backend: Healthy'; }
+        else { label.textContent = 'Backend: Error'; }
       } catch {
-        dot.classList.add('err'); dot.classList.remove('ok'); label.textContent = 'Backend: Offline';
+        label.textContent = 'Backend: Offline';
       }
     }
 
@@ -315,12 +297,12 @@
         <a href="/">← Back</a>
       </div>
       <div class="status">
-        <span class="dot" id="healthdot"></span>
+        <span id="timeText"></span>
+        <span class="sep">|</span>
         <span id="healthlabel">Checking...</span>
       </div>
     </div>
   </header>
-  <div class="time-display"><span id="timeText"></span></div>
   <div class="wrap">
     <div class="messages" id="messages"></div>
   </div>
