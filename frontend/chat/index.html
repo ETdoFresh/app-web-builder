@@ -171,8 +171,21 @@
         ];
       }
       const body = { messages: messagesToSend, session_id: getSessionId() };
-      if (effort && effort !== 'off') {
+      // Read optional budget tokens input
+      const btEl = document.getElementById('budget_tokens');
+      const btRaw = (btEl && typeof btEl.value === 'string') ? btEl.value.trim() : '';
+      const btVal = btRaw === '' ? null : Number(btRaw);
+      const hasBudget = Number.isFinite(btVal) && btVal >= 0;
+      if (effort === 'off') {
+        if (hasBudget) {
+          body.reasoning = { budget_tokens: btVal };
+        } else {
+          // default to strictly zero when off
+          body.reasoning = { budget_tokens: 0 };
+        }
+      } else {
         body.reasoning = { effort };
+        if (hasBudget) body.reasoning.budget_tokens = btVal;
       }
       console.log('[Chat] Request body to backend', body);
       try {
@@ -306,6 +319,9 @@
             <option value="medium" selected>Medium</option>
             <option value="high">High</option>
           </select>
+          <label for="budget_tokens" style="font-size:12px; color:var(--muted)">Max thinking tokens</label>
+          <input id="budget_tokens" type="number" min="0" step="1" placeholder="e.g. 512 or 0" 
+                 style="width:110px; background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 4px 6px;" />
           <a class="link" href="#" onclick="clearChat(); return false;">Clear</a>
           <span>Session: <code style="opacity:0.8">local</code></span>
         </div>
