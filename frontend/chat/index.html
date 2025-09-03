@@ -70,10 +70,19 @@
   </style>
   <script>
     const sessionKey = 'chat_session_id_v1';
+    const thinkingPrefKey = 'chat_thinking_open_v1';
     function getSessionId() {
       let id = localStorage.getItem(sessionKey);
       if (!id) { id = (self.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)); localStorage.setItem(sessionKey, id); }
       return id;
+    }
+
+    // Persisted user preference: whether "Thinking…" is expanded
+    let thinkingOpenPref = false;
+    try { thinkingOpenPref = JSON.parse(localStorage.getItem(thinkingPrefKey) || 'false'); } catch {}
+    function setThinkingOpen(v) {
+      thinkingOpenPref = !!v;
+      try { localStorage.setItem(thinkingPrefKey, JSON.stringify(thinkingOpenPref)); } catch {}
     }
 
     let messages = [];
@@ -84,6 +93,12 @@
 
     function renderMessages() {
       const list = document.getElementById('messages');
+      // Preserve current open/closed state from DOM before re-render (if present)
+      const existingDetailsAll = list.querySelectorAll('details[data-thinking="1"]');
+      if (existingDetailsAll && existingDetailsAll.length) {
+        const lastDetails = existingDetailsAll[existingDetailsAll.length - 1];
+        setThinkingOpen(lastDetails.open);
+      }
       list.innerHTML = '';
       messages.forEach(m => {
         const item = document.createElement('div');
@@ -96,11 +111,14 @@
         // Thinking block: always on top when enabled, toggle show/hide via <details>
         if (m.role === 'assistant' && m.thinking_enabled) {
           const details = document.createElement('details');
+          details.setAttribute('data-thinking', '1');
           details.style.marginBottom = '8px';
           const summary = document.createElement('summary');
           summary.textContent = 'Thinking…';
           const thinkPre = document.createElement('pre');
           thinkPre.textContent = (m.thinking && m.thinking.length) ? m.thinking : '';
+          if (thinkingOpenPref) details.setAttribute('open', 'open');
+          details.addEventListener('toggle', () => setThinkingOpen(details.open));
           details.appendChild(summary);
           details.appendChild(thinkPre);
           bubble.appendChild(details);
