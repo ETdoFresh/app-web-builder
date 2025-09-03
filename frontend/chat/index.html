@@ -151,17 +151,17 @@
           while ((idx = buffer.indexOf('\n\n')) !== -1) {
             const block = buffer.slice(0, idx);
             buffer = buffer.slice(idx + 2);
-            const lines = block.split('\n').filter(l => l.startsWith('data:')).map(l => l.replace(/^data:\s?/, ''));
+            const linesAll = block.split('\n');
+            const eventLine = linesAll.find(l => l.startsWith('event:')) || '';
+            const eventType = eventLine ? eventLine.replace(/^event:\s?/, '').trim() : 'message';
+            const lines = linesAll.filter(l => l.startsWith('data:')).map(l => l.replace(/^data:\s?/, ''));
             for (const line of lines) {
               if (!line || line === '[DONE]') continue;
               try {
                 const json = JSON.parse(line);
                 // Log every parsed SSE JSON for debugging
-                if (json.debug) {
-                  console.log('[Chat][SSE DEBUG]', json.debug);
-                } else {
-                  console.log('[Chat][SSE]', json);
-                }
+                if (eventType === 'debug') console.log('[Chat][SSE DEBUG]', json);
+                else console.log('[Chat][SSE]', json);
                 // Surface explicit error frames from server
                 if (json && json.error) {
                   const detail = json.detail ? `\nDetail: ${String(json.detail).slice(0, 500)}` : '';

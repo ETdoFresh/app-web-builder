@@ -124,9 +124,10 @@ app.post('/api/v1/chat/completions', async (req, res) => {
   const controller = new AbortController();
   let clientAborted = false;
   let finished = false;
-  // Prefer 'aborted' to detect early client cancellations
+  // Detect early client abort while uploading request
   req.on('aborted', () => { clientAborted = true; try { controller.abort(); } catch {} });
-  req.on('close', () => { if (!finished) { clientAborted = true; try { controller.abort(); } catch {} } });
+  // Detect client disconnect on the response stream (SSE)
+  res.on('close', () => { if (!finished) { clientAborted = true; try { controller.abort(); } catch {} } });
   const debugEnabled = (() => {
     const v = String(req.query?.debug || req.headers['x-debug'] || '').toLowerCase();
     return v === '1' || v === 'true' || v === 'yes' || v === 'on';
@@ -149,11 +150,18 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     stream: true,
   };
 
-  // Prepare SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
+  // Prepare SSE headers (per OpenRouter streaming guidance)
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  // Disable proxy buffering for SSE (e.g., nginx)
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders && res.flushHeaders();
+
+  // Periodic comment pings keep intermediaries from timing out idle streams
+  const keepAlive = setInterval(() => {
+    try { res.write(`: ping\n\n`); } catch {}
+  }, 15000);
 
   try {
     // If debugging, emit a pre-flight debug frame with the outbound payload (sanitized)
@@ -165,7 +173,8 @@ app.post('/api/v1/chat/completions', async (req, res) => {
         message_count: Array.isArray(upstreamBody.messages) ? upstreamBody.messages.length : 0,
         messages: upstreamBody.messages,
       };
-      res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
+      res.write(`event: debug\n`);
+      res.write(`data: ${JSON.stringify(dbg)}\n\n`);
     }
     // Persist request payload (best-effort)
     try {
@@ -197,7 +206,8 @@ app.post('/api/v1/chat/completions', async (req, res) => {
       const text = await orRes.text().catch(() => '');
       if (debugEnabled) {
         const dbg = { type: 'response_error', status: orRes.status, statusText: orRes.statusText, body: text?.slice(0, 4000) };
-        res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
+        res.write(`event: debug\n`);
+        res.write(`data: ${JSON.stringify(dbg)}\n\n`);
       }
       res.write(`data: ${JSON.stringify({ error: `OpenRouter error ${orRes.status}`, detail: text })}\n\n`);
       return res.end();
@@ -245,9 +255,11 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     }
     if (debugEnabled) {
       const dbg = { type: 'response_summary', status: orRes.status, assistant_chars: assistantText.length };
-      res.write(`data: ${JSON.stringify({ debug: dbg })}\n\n`);
+      res.write(`event: debug\n`);
+      res.write(`data: ${JSON.stringify(dbg)}\n\n`);
     }
     finished = true;
+    try { clearInterval(keepAlive); } catch {}
     res.end();
 
     // Persist response payload (best-effort)
@@ -268,6 +280,7 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     }
     if (!res.writableEnded) {
       try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch {}
+      try { clearInterval(keepAlive); } catch {}
       try { res.end(); } catch {}
     }
   }
