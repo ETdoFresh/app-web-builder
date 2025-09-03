@@ -164,6 +164,10 @@ app.post('/api/v1/chat/completions', async (req, res) => {
   }, 15000);
 
   try {
+    // Compute Referer before any debug usage
+    const siteUrlEnv = process.env.OPENROUTER_SITE || process.env.OPENROUTER_SITE_URL;
+    const referer = siteUrlEnv || req.headers['origin'] || req.headers['referer'] || 'http://localhost:3000';
+
     // If debugging, emit a pre-flight debug frame with the outbound payload (sanitized)
     if (debugEnabled) {
       const dbg = {
@@ -191,7 +195,6 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     }
     // Compute Referer per OpenRouter's browser-origin requirements
     const siteUrlEnv = process.env.OPENROUTER_SITE || process.env.OPENROUTER_SITE_URL;
-    const referer = siteUrlEnv || req.headers['origin'] || req.headers['referer'] || 'http://localhost:3000';
     const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
