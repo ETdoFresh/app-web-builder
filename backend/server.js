@@ -269,6 +269,7 @@ app.post('/api/v1/chat/completions', async (req, res) => {
     const decoder = new TextDecoder();
     let sseBuffer = '';
     let assistantText = '';
+    let assistantReasoning = '';
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -298,6 +299,24 @@ app.post('/api/v1/chat/completions', async (req, res) => {
               } else if (typeof json.content === 'string') {
                 assistantText += json.content;
               }
+
+              // Accumulate provider-specific reasoning/thinking tokens if present
+              const appendReasoning = (val) => {
+                if (typeof val === 'string' && val) assistantReasoning += val;
+              };
+              if (choice && choice.delta) {
+                appendReasoning(choice.delta.reasoning);
+                appendReasoning(choice.delta.reasoning_content);
+                appendReasoning(choice.delta.thinking);
+              }
+              if (choice && choice.message) {
+                appendReasoning(choice.message.reasoning);
+                appendReasoning(choice.message.reasoning_content);
+                appendReasoning(choice.message.thinking);
+              }
+              appendReasoning(json.reasoning);
+              appendReasoning(json.reasoning_content);
+              appendReasoning(json.thinking);
             } catch (e) {
               // Non-JSON data line; ignore
             }
@@ -316,9 +335,11 @@ app.post('/api/v1/chat/completions', async (req, res) => {
 
     // Persist response payload (best-effort)
     try {
+      const meta = { status: orRes.status };
+      if (assistantReasoning && assistantReasoning.trim().length) meta.thinking = assistantReasoning;
       await query(
         'INSERT INTO chat_logs (session_id, direction, role, content, model, meta) VALUES ($1,$2,$3,$4,$5,$6)',
-        [sessionId, 'response', 'assistant', assistantText || null, model, JSON.stringify({ status: orRes.status })]
+        [sessionId, 'response', 'assistant', assistantText || null, model, JSON.stringify(meta)]
       );
     } catch (e) {
       console.warn('Failed to persist response log:', e.message);

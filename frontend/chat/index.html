@@ -56,6 +56,8 @@
     .msg pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; }
     details summary { cursor: pointer; color: var(--muted); }
     details pre { margin-top: 6px; opacity: 0.95; }
+    /* Render thinking content in grey for readability */
+    details[data-thinking] pre { color: #b8bfd6; }
 
     .composer {
       position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px;
@@ -447,7 +449,8 @@
           if (l.direction === 'request' && typeof l.content === 'string' && l.content) {
             messages.push({ role: 'user', content: l.content });
           } else if (l.direction === 'response' && typeof l.content === 'string') {
-            messages.push({ role: 'assistant', content: l.content });
+            const thinking = l && l.meta && typeof l.meta.thinking === 'string' ? l.meta.thinking : '';
+            messages.push({ role: 'assistant', content: l.content, thinking, thinking_enabled: !!thinking, thinking_open: thinkingOpenPref });
           }
         });
         renderMessages();
